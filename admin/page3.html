@@ -1,0 +1,237 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vending Machine — Product Manager</title>
+
+  <!-- Bootstrap 5 CDN -->
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    body { padding: 1.5rem; background:#f8f9fa; }
+    .table-wrapper { max-height:60vh; overflow:auto; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace; }
+    .small-note { font-size:0.85rem; color:#6c757d; }
+    img.thumb { width:48px; height:48px; object-fit:cover; border-radius:6px; }
+  </style>
+
+</head>
+<body>
+<div class="container">
+  <h1 class="h4 mb-3">Product Manager</h1>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <button id="btnReload" class="btn btn-outline-secondary btn-sm">Reload</button>
+      <button id="btnNew" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#productModal">New Product</button>
+    </div>
+  </div>
+
+  <div class="table-responsive table-wrapper">
+    <table class="table table-sm table-hover">
+      <thead class="table-light">
+        <tr>
+          <th>ID</th><th>Name</th><th>Price</th><th>Qty</th><th>Image</th><th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="productsTbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal -->
+
+<div class="modal fade" id="productModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form id="productForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Product</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-md-6"><input id="productId" class="form-control" placeholder="Product ID" required></div>
+            <div class="col-md-6"><input id="name" class="form-control" placeholder="Name" required></div>
+            <div class="col-md-4"><input id="price" type="number" class="form-control" placeholder="Price" required></div>
+            <div class="col-md-4"><input id="quantity" type="number" class="form-control" placeholder="Qty" required></div>
+            <div class="col-md-4"><input id="image" type="file" accept="image/*" class="form-control"></div>
+            <div class="col-12">
+              <img id="preview" style="max-height:120px;display:none" />
+              <div id="imgInfo" class="small-note"></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btnDelete" type="button" class="btn btn-outline-danger me-auto d-none">Delete</button>
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+(() => {
+  const API_BASE = "https://api.nrobo.in";
+  const tbody = document.getElementById('productsTbody');
+  const modal = new bootstrap.Modal(document.getElementById('productModal'));
+
+  const f = {
+    id: document.getElementById('productId'),
+    name: document.getElementById('name'),
+    price: document.getElementById('price'),
+    quantity: document.getElementById('quantity'),
+    image: document.getElementById('image'),
+    preview: document.getElementById('preview'),
+    info: document.getElementById('imgInfo')
+  };
+
+  let products = [];
+  let editing = null;
+  let imageBase64 = null;
+
+  async function compressImage(file, maxKB = 100) {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    await new Promise(r => img.onload = r, img.src = url);
+
+    const canvas = document.createElement('canvas');
+    let w = img.width, h = img.height;
+    const max = 800;
+    if (w > max || h > max) {
+      const s = Math.min(max / w, max / h);
+      w *= s; h *= s;
+    }
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+
+    let q = 0.9, blob;
+    do {
+      blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', q));
+      q -= 0.05;
+    } while (blob.size / 1024 > maxKB && q > 0.2);
+
+    return new Promise(r => {
+      const fr = new FileReader();
+      fr.onload = () => r(fr.result);
+      fr.readAsDataURL(blob);
+    });
+  }
+
+f.image.addEventListener('change', async () => {
+  if (!f.image.files || !f.image.files[0]) return;
+
+  imageBase64 = await compressImage(f.image.files[0]);
+
+  f.preview.src = imageBase64;
+  f.preview.style.display = 'block';
+  f.info.textContent =
+    `Compressed size: ${Math.round(imageBase64.length * 0.75 / 1024)} KB`;
+});
+
+
+  function row(p) {
+    return `<tr data-id="${p.productId}">
+      <td>${p.productId}</td>
+      <td>${p.name}</td>
+      <td>${p.price}</td>
+      <td>${p.quantity}</td>
+      <td>${p.imageBase64 ? `<img src="${p.imageBase64}" class="thumb">` : '-'}</td>
+      <td class="text-end">
+        <button class="btn btn-sm btn-outline-primary edit">Edit</button>
+        <button class="btn btn-sm btn-outline-danger del">Delete</button>
+      </td></tr>`;
+  }
+
+  async function load() {
+    const r = await fetch(`${API_BASE}/ProductMaster`);
+    products = await r.json();
+    tbody.innerHTML = products.map(row).join('');
+  }
+
+  tbody.onclick = async e => {
+    const tr = e.target.closest('tr'); if (!tr) return;
+    const id = tr.dataset.id;
+    if (e.target.classList.contains('edit')) {
+      const p = products.find(x => x.productId === id);
+      editing = id;
+
+      // reset image state FIRST
+      imageBase64 = null;
+      f.preview.src = '';
+      f.preview.style.display = 'none';
+      f.info.textContent = '';
+      f.image.value = '';
+
+      f.id.value = p.productId;
+      f.id.readOnly = true;
+      f.name.value = p.name || '';
+      f.price.value = p.price ?? '';
+      f.quantity.value = p.quantity ?? '';
+
+      if (p.imageBase64) {
+        imageBase64 = p.imageBase64;
+        f.preview.src = imageBase64;
+        f.preview.style.display = 'block';
+        f.info.textContent = `Existing image`;
+      }
+
+      modal.show();
+    }
+    }
+	
+productsTbody.addEventListener('click', async (e) => {
+  const row = e.target.closest('tr[data-id]');
+  if (!row) return;
+
+  const id = row.dataset.id;
+
+  if (e.target.classList.contains('del')) {
+    if (!confirm('Delete?')) return;
+
+    await fetch(`${API_BASE}/ProductMaster/${id}`, {
+      method: 'DELETE'
+    });
+
+    load();
+  }
+});
+
+
+
+  productForm.onsubmit = async e => {
+    e.preventDefault();
+    const payload = {
+      productId: f.id.value,
+      name: f.name.value,
+      price: +f.price.value,
+      quantity: +f.quantity.value,
+      imageBase64
+    };
+    await fetch(`${API_BASE}/ProductMaster${editing ? '/' + editing : ''}`, {
+      method: editing ? 'PUT' : 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify(payload)
+    });
+    modal.hide();
+    editing = null; imageBase64 = null; f.id.readOnly = false;
+    load();
+  };
+
+  btnNew.onclick = () => { editing = null; productForm.reset(); f.preview.style.display='none'; imageBase64=null; };
+  btnReload.onclick = load;
+
+  load();
+})();
+</script>
+
+</body>
+</html>

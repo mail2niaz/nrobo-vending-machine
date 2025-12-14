@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vending Machine — Product Manager</title>
+
+  <!-- Bootstrap 5 CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    /* small additional styling */
+    body { padding: 1.5rem; background:#f8f9fa; }
+    .table-wrapper { max-height:60vh; overflow:auto; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace; }
+    .small-note { font-size:0.85rem; color:#6c757d; }
+    @media (max-width:576px) {
+      .table-responsive { font-size:0.9rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="d-flex flex-column flex-md-row align-items-start justify-content-between mb-3">
+      <div>
+        <h1 class="h4 mb-0">Product Manager</h1>
+        <div class="small-note">Manage vending machine products (A1, A2 ...)</div>
+      </div>
+
+      <div class="mt-3 mt-md-0">
+        <div class="d-flex gap-2">
+          <button id="btnReload" class="btn btn-outline-secondary">Reload</button>
+          <button id="btnNew" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#productModal">New Product</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Status / Alerts -->
+    <div id="alertArea"></div>
+
+    <!-- Search and filter -->
+    <div class="row mb-2">
+      <div class="col-sm-6 mb-2">
+        <input id="searchInput" type="search" class="form-control" placeholder="Search by name, slot code, productId..." />
+      </div>
+      <div class="col-sm-6 text-sm-end small-note">
+        API Base: <span id="apiBaseLabel" class="mono"></span>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card shadow-sm mb-3">
+      <div class="card-body p-2">
+        <div class="table-responsive table-wrapper">
+          <table id="productsTable" class="table table-hover table-sm mb-0">
+            <thead class="table-light position-sticky top-0" style="z-index:1;">
+              <tr>
+                <th>ProductId</th>
+                <th>Name</th>
+                <th>Price</th>
+                <th>Qty</th>
+                <th>Slot</th>
+                <th>Machine</th>
+                <th>Last Restocked</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="productsTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <footer class="d-flex justify-content-between align-items-center small-note">
+      <div>Tip: Click <em>Edit</em> to modify a product, or <em>Delete</em> to remove it.</div>
+      <div id="lastUpdated">—</div>
+    </footer>
+  </div>
+
+  <!-- Product Modal (Create / Edit) -->
+  <div class="modal fade" id="productModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <form id="productForm" class="needs-validation" novalidate>
+          <div class="modal-header">
+            <h5 class="modal-title" id="modalTitle">New Product</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+
+          <div class="modal-body">
+            <div id="modalAlert"></div>
+
+            <div class="row g-2">
+              <div class="col-md-4">
+                <label class="form-label">Product ID</label>
+                <input id="productId" name="productId" class="form-control" placeholder="P001" required>
+                <div class="invalid-feedback">ProductId is required.</div>
+                <div class="form-text small-note">Unique ID (e.g., P001). When editing, this field is read-only.</div>
+              </div>
+
+              <div class="col-md-8">
+                <label class="form-label">Name</label>
+                <input id="name" name="name" class="form-control" placeholder="Coca-Cola 300ml" required>
+                <div class="invalid-feedback">Name is required.</div>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Price</label>
+                <input id="price" name="price" type="number" step="0.01" min="0" class="form-control" placeholder="45" required>
+                <div class="invalid-feedback">Price required.</div>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Quantity</label>
+                <input id="quantity" name="quantity" type="number" min="0" class="form-control" placeholder="12" required>
+                <div class="invalid-feedback">Quantity required.</div>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Slot Code</label>
+                <input id="slotCode" name="slot.code" class="form-control" placeholder="A3" required>
+                <div class="invalid-feedback">Slot code required.</div>
+                <div class="form-text small-note">Format: A3 (RowLetter + ColumnNumber)</div>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Slot Row</label>
+                <input id="slotRow" name="slot.row" type="number" min="1" class="form-control" placeholder="1" required>
+                <div class="invalid-feedback">Slot row required.</div>
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label">Machine ID</label>
+                <input id="machineId" name="machineId" class="form-control" placeholder="VM-TRI-01" required>
+                <div class="invalid-feedback">MachineId required.</div>
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label">Status</label>
+                <select id="status" class="form-select" required>
+                  <option value="AVAILABLE">AVAILABLE</option>
+                  <option value="SOLDOUT">SOLDOUT</option>
+                  <option value="DISABLED">DISABLED</option>
+                </select>
+              </div>
+
+              <div class="col-12">
+                <label class="form-label">Parameter String Value (optional)</label>
+                <input id="paramStr" class="form-control" maxlength="128">
+              </div>
+
+              <div class="col-12">
+                <label class="form-label">Notes</label>
+                <textarea id="notes" class="form-control" rows="2" placeholder="Optional internal note..."></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button id="btnDelete" type="button" class="btn btn-outline-danger me-auto d-none">Delete</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button id="btnSave" type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap + Popper + Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    (function () {
+      // ---------- CONFIG ----------
+      // Set your API base URL here (no trailing slash), e.g.:
+      // const API_BASE = "https://bxxzb73nbk.execute-api.ap-south-1.amazonaws.com";
+      // If using a stage or $default route, include it (or use the root if using custom domain)
+      const API_BASE = "https://api.nrobo.in"; // <<-- set this before using (or leave blank to use relative path)
+
+      // ROUTES
+      const ENDPOINTS = {
+        list: () => `${API_BASE}/ProductMaster`,
+        create: () => `${API_BASE}/ProductMaster`,
+        read: (id) => `${API_BASE}/ProductMaster/${encodeURIComponent(id)}`,
+        update: (id) => `${API_BASE}/ProductMaster/${encodeURIComponent(id)}`,
+        delete: (id) => `${API_BASE}/ProductMaster/${encodeURIComponent(id)}`
+      };
+
+      // ---------- DOM ----------
+      const apiBaseLabel = document.getElementById('apiBaseLabel');
+      const productsTbody = document.getElementById('productsTbody');
+      const alertArea = document.getElementById('alertArea');
+      const lastUpdated = document.getElementById('lastUpdated');
+      const searchInput = document.getElementById('searchInput');
+      const btnReload = document.getElementById('btnReload');
+      const btnNew = document.getElementById('btnNew');
+
+      const productModalEl = document.getElementById('productModal');
+      const bsModal = new bootstrap.Modal(productModalEl);
+      const modalTitle = document.getElementById('modalTitle');
+      const productForm = document.getElementById('productForm');
+      const btnDelete = document.getElementById('btnDelete');
+      const btnSave = document.getElementById('btnSave');
+      const modalAlert = document.getElementById('modalAlert');
+
+      // form fields
+      const fld = {
+        productId: document.getElementById('productId'),
+        name: document.getElementById('name'),
+        price: document.getElementById('price'),
+        quantity: document.getElementById('quantity'),
+        slotCode: document.getElementById('slotCode'),
+        slotRow: document.getElementById('slotRow'),
+        machineId: document.getElementById('machineId'),
+        status: document.getElementById('status'),
+        paramStr: document.getElementById('paramStr'),
+        notes: document.getElementById('notes')
+      };
+
+      // State
+      let products = [];
+      let editingId = null;
+
+      apiBaseLabel.textContent = API_BASE || '(relative)';
+
+      // ---------- Helpers ----------
+      function showAlert(message, type = 'success', timeout = 5000) {
+        alertArea.innerHTML = `
+          <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+            ${escapeHtml(message)}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>`;
+        if (timeout) setTimeout(() => {
+          const el = alertArea.querySelector('.alert');
+          if (el) bootstrap.Alert.getOrCreateInstance(el).close();
+        }, timeout);
+      }
+
+      function showModalAlert(message, type = 'danger') {
+        modalAlert.innerHTML = `<div class="alert alert-${type} alert-sm">${escapeHtml(message)}</div>`;
+      }
+
+      function clearModalAlert() { modalAlert.innerHTML = ''; }
+
+      function escapeHtml(s = '') {
+        return String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+      }
+
+      function formatDate(iso) {
+        if (!iso) return '-';
+        try {
+          const d = new Date(iso);
+          if (isNaN(d)) return iso;
+          return d.toLocaleString();
+        } catch (e) {
+          return iso;
+        }
+      }
+
+      function toProductRow(p) {
+        return `
+          <tr data-id="${escapeHtml(p.productId)}">
+            <td class="mono">${escapeHtml(p.productId)}</td>
+            <td>${escapeHtml(p.name)}</td>
+            <td>${escapeHtml(p.price ?? '')}</td>
+            <td>${escapeHtml(p.quantity ?? '')}</td>
+            <td>${escapeHtml(p.slot?.code ?? '')}</td>
+            <td class="mono">${escapeHtml(p.machineId ?? '')}</td>
+            <td>${formatDate(p.lastRestocked ?? p.lastRestocked)}</td>
+            <td class="text-end">
+              <div class="btn-group btn-group-sm" role="group">
+                <button class="btn btn-outline-primary btn-edit">Edit</button>
+                <button class="btn btn-outline-danger btn-delete">Delete</button>
+              </div>
+            </td>
+          </tr>`;
+      }
+
+      function renderTable(list) {
+        productsTbody.innerHTML = list.map(toProductRow).join('') || `<tr><td colspan="8" class="text-center small-note">No products</td></tr>`;
+        lastUpdated.textContent = `Loaded: ${new Date().toLocaleTimeString()}`;
+      }
+
+      // ---------- API calls ----------
+      async function apiFetch(url, opts = {}) {
+        // default headers
+        const headers = opts.headers || {};
+        if (!headers['Content-Type'] && !(opts.body instanceof FormData)) {
+          headers['Content-Type'] = 'application/json';
+        }
+        opts.headers = headers;
+        try {
+          const resp = await fetch(url, opts);
+          const text = await resp.text();
+          let data = text ? JSON.parse(text) : null;
+          if (!resp.ok) {
+            // try to pull message
+            const msg = (data && (data.message || data.error)) ? (data.message || data.error) : `HTTP ${resp.status}`;
+            throw new Error(msg);
+          }
+          return data;
+        } catch (err) {
+          throw err;
+        }
+      }
+
+      async function fetchAll() {
+        try {
+          btnReload.disabled = true;
+          const data = await apiFetch(ENDPOINTS.list(), { method: 'GET' });
+          // if backend returns list in property or direct array, handle both
+          products = Array.isArray(data) ? data : (Array.isArray(data.Items) ? data.Items : []);
+          // if items look like DynamoDB Items (M/N/S) you may need conversion on backend
+          renderTable(products);
+        } catch (err) {
+          showAlert('Failed to load products: ' + err.message, 'danger', 8000);
+        } finally {
+          btnReload.disabled = false;
+        }
+      }
+
+      async function fetchOne(id) {
+        const url = ENDPOINTS.read(id);
+        return await apiFetch(url, { method: 'GET' });
+      }
+
+      async function createProduct(payload) {
+        return await apiFetch(ENDPOINTS.create(), {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+      }
+
+      async function updateProduct(id, payload) {
+        return await apiFetch(ENDPOINTS.update(id), {
+          method: 'PUT',
+          body: JSON.stringify(payload)
+        });
+      }
+
+      async function deleteProductApi(id) {
+        return await apiFetch(ENDPOINTS.delete(id), {
+          method: 'DELETE'
+        });
+      }
+
+      // ---------- UI actions ----------
+      btnReload.addEventListener('click', fetchAll);
+
+      searchInput.addEventListener('input', () => {
+        const q = searchInput.value.trim().toLowerCase();
+        if (!q) return renderTable(products);
+        const filtered = products.filter(p =>
+          (p.productId && p.productId.toLowerCase().includes(q)) ||
+          (p.name && p.name.toLowerCase().includes(q)) ||
+          (p.slot && p.slot.code && p.slot.code.toLowerCase().includes(q)) ||
+          (p.machineId && p.machineId.toLowerCase().includes(q))
+        );
+        renderTable(filtered);
+      });
+
+      // open modal for new product
+      btnNew.addEventListener('click', () => {
+        editingId = null;
+        modalTitle.textContent = 'New Product';
+        btnDelete.classList.add('d-none');
+        clearModalFields();
+        clearModalAlert();
+      });
+
+      // delegate table actions (edit/delete)
+      productsTbody.addEventListener('click', async (ev) => {
+        const row = ev.target.closest('tr[data-id]');
+        if (!row) return;
+        const id = row.getAttribute('data-id');
+        if (ev.target.classList.contains('btn-edit')) {
+          // edit flow
+          try {
+            modalTitle.textContent = 'Edit Product';
+            clearModalAlert();
+            btnDelete.classList.remove('d-none');
+            editingId = id;
+            // fetch product and prefill
+            const p = await fetchOne(id);
+            prefillModal(p);
+            bsModal.show();
+          } catch (err) {
+            showAlert('Failed to fetch product: ' + err.message, 'danger');
+          }
+        } else if (ev.target.classList.contains('btn-delete')) {
+          if (!confirm(`Delete product ${id}?`)) return;
+          try {
+            await deleteProductApi(id);
+            showAlert('Product deleted', 'success');
+            await fetchAll();
+          } catch (err) {
+            showAlert('Delete failed: ' + err.message, 'danger');
+          }
+        }
+      });
+
+      btnDelete.addEventListener('click', async () => {
+        if (!editingId) return;
+        if (!confirm(`Delete product ${editingId}?`)) return;
+        try {
+          await deleteProductApi(editingId);
+          bsModal.hide();
+          showAlert('Product deleted', 'success');
+          await fetchAll();
+        } catch (err) {
+          showModalAlert('Delete failed: ' + err.message);
+        }
+      });
+
+      // form submit
+      productForm.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        // simple validation
+        if (!productForm.checkValidity()) {
+          productForm.classList.add('was-validated');
+          return;
+        }
+        clearModalAlert();
+        btnSave.disabled = true;
+
+        const payload = {
+          productId: fld.productId.value.trim(),
+          name: fld.name.value.trim(),
+          price: parseFloat(fld.price.value) || 0,
+          quantity: parseInt(fld.quantity.value || '0', 10),
+          slot: {
+            row: parseInt(fld.slotRow.value || '0', 10),
+            column: parseInt((fld.slotCode.value.replace(/[^0-9]/g, '')) || '0', 10),
+            code: fld.slotCode.value.trim()
+          },
+          machineId: fld.machineId.value.trim(),
+          status: fld.status.value,
+          parameter_string_value: fld.paramStr.value.trim(),
+          notes: fld.notes.value.trim(),
+          lastRestocked: new Date().toISOString()
+        };
+
+        try {
+          if (editingId) {
+            // update
+            await updateProduct(editingId, payload);
+            showAlert('Product updated', 'success');
+          } else {
+            // create
+            await createProduct(payload);
+            showAlert('Product created', 'success');
+          }
+          bsModal.hide();
+          await fetchAll();
+        } catch (err) {
+          showModalAlert('Save failed: ' + err.message);
+        } finally {
+          btnSave.disabled = false;
+        }
+      });
+
+      // populate modal form
+      function prefillModal(p) {
+        // assume backend returns fields similar to our JSON
+        fld.productId.value = p.productId || '';
+        fld.name.value = p.name || '';
+        fld.price.value = p.price ?? '';
+        fld.quantity.value = p.quantity ?? '';
+        fld.slotCode.value = p.slot?.code || '';
+        fld.slotRow.value = p.slot?.row ?? '';
+        fld.machineId.value = p.machineId || '';
+        fld.status.value = p.status || 'AVAILABLE';
+        fld.paramStr.value = p.parameter_string_value || p.parameterStringValue || '';
+        fld.notes.value = p.notes || '';
+        // when editing, productId is read-only
+        fld.productId.readOnly = true;
+        productForm.classList.remove('was-validated');
+      }
+
+      function clearModalFields() {
+        fld.productId.value = '';
+        fld.name.value = '';
+        fld.price.value = '';
+        fld.quantity.value = '';
+        fld.slotCode.value = '';
+        fld.slotRow.value = '';
+        fld.machineId.value = '';
+        fld.status.value = 'AVAILABLE';
+        fld.paramStr.value = '';
+        fld.notes.value = '';
+        fld.productId.readOnly = false;
+        productForm.classList.remove('was-validated');
+      }
+
+      // ---------- Init ----------
+      // fetch initial list
+      fetchAll();
+
+      // expose a small debug helper (optional)
+      window.__vm_ui = { fetchAll, products };
+    })();
+  </script>
+</body>
+</html>
