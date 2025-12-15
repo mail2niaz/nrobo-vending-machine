@@ -1,0 +1,8 @@
+"PK","SK","amount","column","createdAt","gateway","installedOn","lastRestocked","location","machineId","motorId","paidAt","paymentId","price","productId","provider","quantity","quantityAdded","refundedAt","refundId","restockedBy","row","slotCode","status","transactionId"
+"TXN#TXN-005","PAYMENT#PAY98765","45","","","Razorpay","","","","","","2024-02-10T12:30:05Z","PAY98765","","","UPI","","","","","","","","SUCCESS",""
+"MACHINE#VM-001","INV#A1","","","","","","2024-02-01T10:00:00Z","","","","","","50","P10","","10","","","","","","A1","AVAILABLE",""
+"MACHINE#VM-001","META","","","","","2024-01-01T00:00:00Z","","Prime Location VM-001","VM-001","","","","","","","","","","","","","","ACTIVE",""
+"MACHINE#VM-001","RESTOCK#2024-02-01T10:00:00Z#A1","","","","","","","","","","","","","P10","","","10","","","operator1","","A1","",""
+"MACHINE#VM-001","SLOT#A1","","1","","","","","","","MOTOR_A1","","","","","","","","","","","A","A1","ACTIVE",""
+"TXN#TXN-005","META","50","","2024-02-10T12:00:00Z","","","","","VM-001","","","","","P10","","","","","","","","A1","SUCCESS","TXN-005"
+"TXN#TXN-005","REFUND#REF-005","50","","","","","","","","","","","","","","","","2024-02-10T12:05:00Z","REF-005","","","","SUCCESS",""
